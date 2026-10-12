@@ -1,0 +1,10 @@
+{
+  "name": "Kisan Mandi Bhav Predictor & Voice Advisory",
+  "description": "Multilingual voice-first APMC mandi price forecasting and crop advisory platform for Indian farmers with 7-day price trends and audio guidance.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
