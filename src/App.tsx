@@ -1,6 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Language, Crop, Mandi } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Language, Crop, Mandi, PredictionResult } from './types';
 import { CROPS, MANDIS, calculateForecast } from './data/mandiData';
+import {
+  fetchDynamicMandiData,
+  buildPredictionWithDynamicData,
+  DynamicMandiResponse,
+} from './services/mandiDataService';
 import { Navbar } from './components/Navbar';
 import { VoiceAssistant } from './components/VoiceAssistant';
 import { AdvisoryHeroCard } from './components/AdvisoryHeroCard';
@@ -18,6 +23,10 @@ import {
   Award,
   Layers,
   Sparkles,
+  RefreshCw,
+  Radio,
+  Database,
+  CheckCircle,
 } from 'lucide-react';
 
 export default function App() {
@@ -27,15 +36,46 @@ export default function App() {
   const [autoSpeak, setAutoSpeak] = useState<boolean>(false);
   const [isCodeExplorerOpen, setIsCodeExplorerOpen] = useState<boolean>(false);
 
-  // Compute prediction results reactively
-  const prediction = useMemo(() => {
-    return calculateForecast(selectedMandiId, selectedCropId);
-  }, [selectedMandiId, selectedCropId]);
+  // Dynamic live data state
+  const [prediction, setPrediction] = useState<PredictionResult>(() =>
+    calculateForecast(selectedMandiId, selectedCropId)
+  );
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastRefreshedTime, setLastRefreshedTime] = useState<string>('Just now');
+
+  // Dynamic fetch handler
+  const loadDynamicData = useCallback(
+    async (cropId: string, mandiId: string, force: boolean = false) => {
+      setIsRefreshing(true);
+      try {
+        const dynData = await fetchDynamicMandiData(cropId, mandiId, force);
+        const pred = buildPredictionWithDynamicData(mandiId, cropId, dynData);
+        setPrediction(pred);
+        setLastRefreshedTime(dynData.lastRefreshed);
+      } catch (err) {
+        // Fallback gracefully without crashing
+        const fallbackPred = calculateForecast(mandiId, cropId);
+        setPrediction(fallbackPred);
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    []
+  );
+
+  // Fetch when crop or mandi changes
+  useEffect(() => {
+    loadDynamicData(selectedCropId, selectedMandiId, false);
+  }, [selectedCropId, selectedMandiId, loadDynamicData]);
 
   // Voice Query Callback
   const handleVoiceQuery = (cropId?: string, mandiId?: string) => {
     if (cropId) setSelectedCropId(cropId);
     if (mandiId) setSelectedMandiId(mandiId);
+  };
+
+  const handleManualRefresh = () => {
+    loadDynamicData(selectedCropId, selectedMandiId, true);
   };
 
   return (
@@ -57,6 +97,63 @@ export default function App() {
             currentLang={currentLang}
             onSelectQuery={handleVoiceQuery}
           />
+        </section>
+
+        {/* Real-time Dynamic Data Status & Refresh Control Bar */}
+        <section
+          aria-label="Real-time Data Status"
+          className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-stone-200 flex flex-wrap items-center justify-between gap-3 text-xs"
+        >
+          <div className="flex items-center space-x-3 flex-wrap gap-y-1.5">
+            <div className="flex items-center space-x-1.5">
+              {prediction.isLiveData ? (
+                <span className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-300">
+                  <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                  <span>
+                    {currentLang === 'hi'
+                      ? 'लाइव APMC डेटा फीड (data.gov.in)'
+                      : 'Live APMC Data Feed (data.gov.in)'}
+                  </span>
+                </span>
+              ) : (
+                <span className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-300">
+                  <Database className="w-3.5 h-3.5 text-amber-700" />
+                  <span>
+                    {currentLang === 'hi'
+                      ? 'ऑफ़लाइन रेजिलिएंट मोड: Agmarknet ऐतिहासिक रिकॉर्ड'
+                      : 'Offline Resilient Mode: Agmarknet Historical'}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            <div className="text-stone-500 font-medium hidden sm:inline">
+              <span>आवक तारीख: <strong>{prediction.arrivalDate || 'आज'}</strong></span>
+              <span className="mx-2">·</span>
+              <span>अंतिम अपडेट: <strong>{lastRefreshedTime}</strong></span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+              isRefreshing
+                ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 shadow-sm active:scale-95'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-stone-400' : 'text-emerald-700'}`} />
+            <span>
+              {isRefreshing
+                ? currentLang === 'hi'
+                  ? 'रिफ्रेश हो रहा है...'
+                  : 'Fetching Live Data...'
+                : currentLang === 'hi'
+                ? '🔄 लाइव भाव रिफ्रेश करें'
+                : '🔄 Refresh Live Rates'}
+            </span>
+          </button>
         </section>
 
         {/* 2. Interactive Crop & Mandi Selectors */}

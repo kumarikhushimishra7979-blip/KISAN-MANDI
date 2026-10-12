@@ -1,6 +1,7 @@
 import React from 'react';
 import { Language } from '../types';
 import { Volume2, VolumeX, FileCode2, Globe2, Sparkles } from 'lucide-react';
+import { speechService } from '../services/speechService';
 
 interface NavbarProps {
   currentLang: Language;
@@ -17,6 +18,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleAutoSpeak,
   onOpenCodeExplorer,
 }) => {
+  const handleSelectLanguage = (lang: Language) => {
+    speechService.stopSpeaking();
+    onLanguageChange(lang);
+  };
   return (
     <header className="sticky top-0 z-40 bg-emerald-900 text-stone-100 border-b border-emerald-800 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -74,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center bg-emerald-950/80 p-1 rounded-lg border border-emerald-700/60">
               <Globe2 className="w-4 h-4 text-emerald-400 ml-1.5 mr-1 hidden sm:inline" />
               <button
-                onClick={() => onLanguageChange('hi')}
+                onClick={() => handleSelectLanguage('hi')}
                 className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
                   currentLang === 'hi'
                     ? 'bg-amber-400 text-emerald-950 shadow-sm'
@@ -84,7 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 हिन्दी
               </button>
               <button
-                onClick={() => onLanguageChange('mai')}
+                onClick={() => handleSelectLanguage('mai')}
                 className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
                   currentLang === 'mai'
                     ? 'bg-amber-400 text-emerald-950 shadow-sm'
@@ -94,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 मैथिली
               </button>
               <button
-                onClick={() => onLanguageChange('en')}
+                onClick={() => handleSelectLanguage('en')}
                 className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
                   currentLang === 'en'
                     ? 'bg-amber-400 text-emerald-950 shadow-sm'

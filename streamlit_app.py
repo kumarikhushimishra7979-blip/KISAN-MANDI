@@ -110,6 +110,9 @@ selected_mandi_label = st.sidebar.selectbox("🏛️ मंडी चुने�
 selected_mandi = MANDIS[selected_mandi_label]
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 📡 डेटा स्रोत स्थिति (Data Feed)")
+refresh_data = st.sidebar.button("🔄 लाइव मंडी भाव रिफ्रेश करें (Refresh)")
+
 st.sidebar.markdown("### 🎙️ आवाज़ से पूछें (Voice Assistant)")
 voice_query = st.sidebar.text_input(
     "या यहाँ टाइप करें / Or speak query:",
@@ -120,23 +123,32 @@ voice_query = st.sidebar.text_input(
 st.markdown('<div class="main-title">🌾 किसान मंडी भाव और आवाज़ सलाहकार</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Kisan Mandi Bhav Predictor & 7-Day ML Price Forecasting System</div>', unsafe_allow_html=True)
 
-# Fetch prediction from backend API or fallback simulator
+# Fetch prediction from backend API or dynamic fallback engine
 API_URL = "http://localhost:8000/predict"
 data = None
 
 try:
-    response = requests.get(API_URL, params={"crop": selected_crop, "mandi": selected_mandi}, timeout=3)
+    response = requests.get(
+        API_URL,
+        params={"crop": selected_crop, "mandi": selected_mandi, "refresh": refresh_data},
+        timeout=3.5
+    )
     if response.status_code == 200:
         data = response.json()
 except Exception:
-    # Fallback realistic calculation if standalone Streamlit execution without separate FastAPI server
-    from app import simulate_xgboost_forecast, MARKET_BASELINES, SUPPORTED_CROPS, generate_advisory
-    base_info = MARKET_BASELINES.get(selected_mandi, MARKET_BASELINES["gulabbagh"])[selected_crop]
-    base_price = base_info["base_price"]
-    forecasts, day7 = simulate_xgboost_forecast(base_price, base_info["trend"], base_info["volatility"])
+    # Standalone dynamic retrieval with resilient CSV fallback
+    from src.live_data_fetcher import get_dynamic_mandi_data
+    from app import simulate_xgboost_forecast, SUPPORTED_CROPS, generate_advisory
+
+    dyn = get_dynamic_mandi_data(selected_crop, selected_mandi, force_refresh=refresh_data)
+    base_price = float(dyn["modal_price"])
+    trend = float(dyn.get("trend", 0.045))
+    volatility = float(dyn.get("volatility", 0.028))
+
+    forecasts, day7 = simulate_xgboost_forecast(base_price, trend, volatility)
     abs_chg = day7 - base_price
     pct_chg = (abs_chg / base_price) * 100
-    crop_meta = SUPPORTED_CROPS[selected_crop]
+    crop_meta = SUPPORTED_CROPS.get(selected_crop, {"hi": "मक्का", "icon": "🌽", "maithili": "मकई"})
     advisory = generate_advisory(
         crop_meta["hi"], selected_crop.capitalize(), crop_meta["maithili"],
         pct_chg, abs_chg, selected_mandi_label, base_price, day7
@@ -146,15 +158,31 @@ except Exception:
         "crop_name": crop_meta["hi"],
         "crop_icon": crop_meta["icon"],
         "current_price": base_price,
-        "min_price": round(base_price * 0.96, 2),
-        "max_price": round(base_price * 1.04, 2),
+        "min_price": round(float(dyn.get("min_price", base_price * 0.96)), 2),
+        "max_price": round(float(dyn.get("max_price", base_price * 1.04)), 2),
+        "today_arrivals": float(dyn.get("arrivals", 3200)),
         "forecast_day7_price": round(day7, 2),
         "price_change_absolute": round(abs_chg, 2),
         "price_change_percentage": round(pct_chg, 2),
         "trend_direction": "UP" if pct_chg >= 2.5 else ("DOWN" if pct_chg <= -2.5 else "STABLE"),
         "advisory": advisory.dict(),
         "forecast_series": [f.dict() for f in forecasts],
+        "data_source": dyn["source"],
+        "is_live_data": dyn["is_live"],
+        "arrival_date": dyn.get("arrival_date", ""),
+        "data_note": dyn.get("note", ""),
     }
+
+if data:
+    # Live data badge
+    is_live = data.get("is_live_data", False)
+    badge_color = "#16a34a" if is_live else "#d97706"
+    badge_label = "🟢 लाइव APMC मंडी डेटा (data.gov.in Live API)" if is_live else f"📦 बैकअप डेटा: Agmarknet ऐतिहासिक रिकॉर्ड ({data.get('data_note', 'Offline Resilient')})"
+    st.markdown(f"""
+    <div style="display:inline-block; padding: 4px 12px; border-radius: 9999px; background: {badge_color}18; border: 1px solid {badge_color}50; color: {badge_color}; font-size: 0.85rem; font-weight: 700; margin-bottom: 1rem;">
+        {badge_label} · तारीख: {data.get('arrival_date', 'आज')}
+    </div>
+    """, unsafe_allow_html=True)
 
 if data:
     adv = data["advisory"]
@@ -177,19 +205,56 @@ if data:
         </div>
         """, unsafe_allow_html=True)
 
-        # Audio Output
-        st.markdown("#### 🔊 आवाज़ में सुनें (Listen in Audio)")
-        speech_script = adv["audio_script_hi"] if current_lang == "hi" else (adv["audio_script_maithili"] if current_lang == "mai" else adv["audio_script_en"])
+        # Audio Output with Dynamic Language Synchronization
+        lang_title = "हिन्दी आवाज़" if current_lang == "hi" else ("मैथिली आवाज़" if current_lang == "mai" else "English Voice")
+        st.markdown(f"#### 🔊 {lang_title} में सुनें (Listen in Audio)")
         
+        speech_script = (
+            adv.get("audio_script_hi", "") if current_lang == "hi"
+            else (adv.get("audio_script_maithili", adv.get("audio_script_hi", "")) if current_lang == "mai"
+            else adv.get("audio_script_en", ""))
+        )
+        
+        # Display clean script preview
+        st.caption(f"🗣️ *\"{speech_script}\"*")
+        
+        audio_played = False
         if HAS_GTTS:
-            if st.button("▶️ सलाह सुनें (Play Audio Voice)", key="audio_btn"):
+            btn_label = f"▶️ {lang_title} सुनें (Play Audio Voice)"
+            if st.button(btn_label, key=f"audio_btn_{current_lang}"):
                 tts_lang = "hi" if current_lang in ["hi", "mai"] else "en"
-                tts = gTTS(text=speech_script, lang=tts_lang, slow=False)
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                    tts.save(fp.name)
-                    st.audio(fp.name, format="audio/mp3")
-        else:
-            st.info(f"🗣️ Audio Script: \"{speech_script}\"")
+                try:
+                    # Use Indian English tld for familiar accent when English is picked
+                    tld = "co.in" if tts_lang == "en" else "com"
+                    tts = gTTS(text=speech_script, lang=tts_lang, tld=tld, slow=False)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                        tts.save(fp.name)
+                        st.audio(fp.name, format="audio/mp3", autoplay=True)
+                        audio_played = True
+                except Exception as e:
+                    st.warning(f"Audio generation fallback: {str(e)}")
+        
+        if not audio_played:
+            # HTML5 Browser Speech Synthesis Button Integration
+            escaped_text = speech_script.replace('"', '&quot;').replace("'", "&#39;")
+            synth_lang = "hi-IN" if current_lang in ["hi", "mai"] else "en-US"
+            st.components.v1.html(
+                f"""
+                <button onclick="speak()" style="background-color:#15803d; color:white; border:none; padding:10px 16px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:14px; margin-top:5px; display:flex; align-items:center; gap:6px;">
+                    🔊 ब्राउज़र आवाज़ में सुनें ({lang_title})
+                </button>
+                <script>
+                function speak() {{
+                    window.speechSynthesis.cancel();
+                    const u = new SpeechSynthesisUtterance("{escaped_text}");
+                    u.lang = "{synth_lang}";
+                    u.rate = 0.88;
+                    window.speechSynthesis.speak(u);
+                }}
+                </script>
+                """,
+                height=55,
+            )
 
     with col_stats:
         st.markdown("### 📊 बाज़ार भाव विवरण (Market Rates)")

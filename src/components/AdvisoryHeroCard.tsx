@@ -79,7 +79,13 @@ export const AdvisoryHeroCard: React.FC<AdvisoryHeroCardProps> = ({
         speechService.stopSpeaking();
       };
     }
-  }, [prediction.crop.id, prediction.mandi.id, autoSpeak]);
+  }, [prediction.crop.id, prediction.mandi.id, autoSpeak, currentLang]);
+
+  // Stop speaking and reset playback state immediately whenever language changes
+  useEffect(() => {
+    speechService.stopSpeaking();
+    setIsPlaying(false);
+  }, [currentLang]);
 
   // Clean up when unmounting
   useEffect(() => {
@@ -119,13 +125,24 @@ export const AdvisoryHeroCard: React.FC<AdvisoryHeroCardProps> = ({
             {crop.icon}
           </div>
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
               <span className="text-xs uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full bg-white/20">
                 {mandi.district}, {mandi.state}
               </span>
               <span className="text-xs text-white/70 font-medium">
                 {mandi.marketType}
               </span>
+              {prediction.isLiveData ? (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-400/30 text-emerald-100 border border-emerald-300/40 flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                  <span>लाइव डेटा (data.gov.in)</span>
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-400/30 text-amber-100 border border-amber-300/40 flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
+                  <span>Agmarknet बैकअप डेटा</span>
+                </span>
+              )}
             </div>
             <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white mt-0.5">
               {currentLang === 'hi'
@@ -153,17 +170,23 @@ export const AdvisoryHeroCard: React.FC<AdvisoryHeroCardProps> = ({
             {isPlaying ? (
               <>
                 <VolumeX className="w-5 h-5 text-stone-950" />
-                <span>{currentLang === 'hi' ? 'आवाज़ रोकें' : 'Stop Audio'}</span>
+                <span>
+                  {currentLang === 'hi'
+                    ? 'आवाज़ रोकें (Stop)'
+                    : currentLang === 'mai'
+                    ? 'आवाज़ रोकि दियौ (Stop)'
+                    : 'Stop Voice'}
+                </span>
               </>
             ) : (
               <>
                 <Volume2 className="w-5 h-5 text-emerald-800" />
                 <span>
                   {currentLang === 'hi'
-                    ? '🔊 आवाज़ में सुनें'
+                    ? '🔊 हिन्दी आवाज़ में सुनें'
                     : currentLang === 'mai'
-                    ? '🔊 आवाज़ मे सुनू'
-                    : '🔊 Listen Advice'}
+                    ? '🔊 मैथिली आवाज़ मे सुनू'
+                    : '🔊 Listen in English'}
                 </span>
               </>
             )}

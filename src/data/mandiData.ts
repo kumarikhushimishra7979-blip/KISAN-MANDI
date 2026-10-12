@@ -279,7 +279,14 @@ export function calculateForecast(mandiId: string, cropId: string): PredictionRe
     action = 'SELL';
   }
 
-  // Create human and voice advisories
+  // Extract clean names without brackets for speech synthesis
+  const cleanCropHi = crop.hindiName.split('(')[0].trim();
+  const cleanMandiHi = mandi.hindiName.split('(')[0].trim();
+  const cleanCropEn = crop.name.split('(')[0].trim();
+  const cleanMandiEn = mandi.name.split('(')[0].trim();
+  const cleanCropMai = crop.maithiliName.split('(')[0].trim();
+  const absDiff = Math.abs(priceChangeAbs);
+
   let actionTitleHi = '';
   let actionTitleEn = '';
   let actionTitleMai = '';
@@ -299,13 +306,13 @@ export function calculateForecast(mandiId: string, cropId: string): PredictionRe
     actionTitleMai = 'माल रोकि कय राखू (अखनि नहि बेची)';
     optimalSaleDay = 5;
 
-    reasonHi = `गुलाबबाग व क्षेत्रीय मंडियों में आवक कम होने से अगले 7 दिनों में भाव ₹${Math.abs(priceChangeAbs)}/क्विंटल (+${priceChangePct}%) बढ़ने की प्रबल संभावना है। 4 से 6 दिन रुकने पर भारी लाभ होगा।`;
-    reasonEn = `Due to tightening arrivals and robust mill demand, prices are projected to rise by ₹${Math.abs(priceChangeAbs)}/Qtl (+${priceChangePct}%). Holding stock for 5-7 days maximizes return.`;
-    reasonMai = `मंडी मे आवक कम रहय स' आबय वला 7 दिन मे दर ₹${Math.abs(priceChangeAbs)} प्रति क्विंटल (+${priceChangePct}%) बढ़य के संभावना अछि। 4-5 दिन रोकि कय बेचिब त' बेसी मुनाफा होयत।`;
+    reasonHi = `गुलाबबाग व क्षेत्रीय मंडियों में आवक कम होने से अगले 7 दिनों में भाव ₹${absDiff}/क्विंटल (+${priceChangePct}%) बढ़ने की प्रबल संभावना है। 4 से 6 दिन रुकने पर भारी लाभ होगा।`;
+    reasonEn = `Due to tightening arrivals and robust mill demand, prices are projected to rise by ₹${absDiff}/Qtl (+${priceChangePct}%). Holding stock for 5-7 days maximizes return.`;
+    reasonMai = `मंडी मे आवक कम रहय स' आबय वला 7 दिन मे दर ₹${absDiff} प्रति क्विंटल (+${priceChangePct}%) बढ़य के संभावना अछि। 4-5 दिन रोकि कय बेचिब त' बेसी मुनाफा होयत।`;
 
-    audioSpeechHi = `राम राम किसान भाई! ${mandi.hindiName} में ${crop.hindiName} का भाव आज ₹${basePrice} है, जो अगले 7 दिनों में बढ़कर लगभग ₹${forecastDay7Price} प्रति क्विंटल होने का अनुमान है। यानी ₹${Math.abs(priceChangeAbs)} का सीधा फायदा। हमारी सलाह है कि अभी फसल न बेचें और 5 दिन बाद ऊंचे दाम पर बेचें।`;
-    audioSpeechEn = `Attention farmer friends! Current price for ${crop.name} at ${mandi.name} is ₹${basePrice} per quintal. Machine learning models forecast prices reaching ₹${forecastDay7Price} in 7 days, a rise of ₹${Math.abs(priceChangeAbs)}. We recommend holding your produce.`;
-    audioSpeechMai = `प्रणाम किसान भाई! ${mandi.hindiName} मे ${crop.maithiliName} के भाव अखन ₹${basePrice} टका अछि, जे 7 दिन मे बढ़ि क' ₹${forecastDay7Price} क्विंटल भ' जायत। माल अखन रोकि कय राखू, नीक फायदा भेटत।`;
+    audioSpeechHi = `राम राम किसान भाई! ${cleanMandiHi} में ${cleanCropHi} का आज का भाव ${basePrice} रुपये प्रति क्विंटल है। हमारे पूर्वानुमान के अनुसार अगले सात दिनों में भाव बढ़कर ${forecastDay7Price} रुपये होने की संभावना है, जिससे आपको प्रति क्विंटल लगभग ${absDiff} रुपये का सीधा अतिरिक्त मुनाफा होगा। इसलिए हमारी स्पष्ट सलाह है कि अभी फसल न बेचें, माल को रोककर रखें और चार से पांच दिन बाद ऊंचे दाम पर बेचें।`;
+    audioSpeechEn = `Attention farmer friends! The current market rate for ${cleanCropEn} at ${cleanMandiEn} is ${basePrice} rupees per quintal. Our machine learning forecast projects prices to rise to ${forecastDay7Price} rupees over the next seven days, offering an extra profit of approximately ${absDiff} rupees per quintal. Therefore, our clear advisory is to HOLD your harvest for four to five days and sell at peak prices.`;
+    audioSpeechMai = `प्रणाम किसान भाई! ${cleanMandiHi} मे ${cleanCropMai} के आजुक दर ${basePrice} रुपया प्रति क्विंटल अछि। आगू सात दिन मे दर बढ़ि कय लगभग ${forecastDay7Price} रुपया होय के संभावना अछि, माने प्रति क्विंटल ${absDiff} रुपया के सीधा फायदा। ताहि लेल सलाह अछि जे अखन माल रोकि कय राखू आ चारि-पाँच दिन बाद नीक दर पर बेची।`;
   } else if (action === 'SELL') {
     urgency = 'high';
     actionTitleHi = 'तुरंत बेचें (मंडी ले जाएं)';
@@ -313,13 +320,13 @@ export function calculateForecast(mandiId: string, cropId: string): PredictionRe
     actionTitleMai = 'झटपट बेची (मंडी ल\' जाउ)';
     optimalSaleDay = 1;
 
-    reasonHi = `नई कटाई की भारी आवक से भाव ₹${Math.abs(priceChangeAbs)}/क्विंटल (${priceChangePct}%) गिरने की आशंका है। नुकसान से बचने के लिए आज या कल में ही बेचें।`;
-    reasonEn = `Heavy market supply glut expected to drag prices down by ₹${Math.abs(priceChangeAbs)}/Qtl (${priceChangePct}%). Selling right now protects your profit margin.`;
-    reasonMai = `मंडी मे बेसी फसल आबय स' दर ₹${Math.abs(priceChangeAbs)} क्विंटल खसय के डर अछि। नुकसानी स' बचय लेल आजुक-काल्हि मे फसल बेचि दियौ।`;
+    reasonHi = `नई कटाई की भारी आवक से भाव ₹${absDiff}/क्विंटल (${priceChangePct}%) गिरने की आशंका है। नुकसान से बचने के लिए आज या कल में ही बेचें।`;
+    reasonEn = `Heavy market supply glut expected to drag prices down by ₹${absDiff}/Qtl (${priceChangePct}%). Selling right now protects your profit margin.`;
+    reasonMai = `मंडी मे बेसी फसल आबय स' दर ₹${absDiff} क्विंटल खसय के डर अछि। नुकसानी स' बचय लेल आजुक-काल्हि मे फसल बेचि दियौ।`;
 
-    audioSpeechHi = `सतर्क रहें किसान भाई! ${mandi.hindiName} में ${crop.hindiName} की आवक तेजी से बढ़ रही है। 7 दिनों में भाव गिरकर ₹${forecastDay7Price} हो सकता है। घाटे से बचने के लिए अपनी उपज तुरंत मंडी ले जाकर आज ही बेचें।`;
-    audioSpeechEn = `Warning to farmers! Heavy arrivals at ${mandi.name} are expected to pull ${crop.name} rates down to ₹${forecastDay7Price}. We strongly advise selling your harvest immediately to avoid losses.`;
-    audioSpeechMai = `सावधान रहू किसान भाई! ${mandi.hindiName} मे ${crop.maithiliName} के दर खसि क' ₹${forecastDay7Price} भ' सकैत अछि। तुरंते मंडी जा क' माल बेचि दियौ।`;
+    audioSpeechHi = `सतर्क रहें किसान भाई! ${cleanMandiHi} में नई कटाई की भारी आवक शुरू हो रही है, जिससे ${cleanCropHi} के भाव में गिरावट की आशंका है। आज का भाव ${basePrice} रुपये है, जो अगले सात दिनों में गिरकर ${forecastDay7Price} रुपये तक आ सकता है, यानी प्रति क्विंटल लगभग ${absDiff} रुपये का नुकसान हो सकता है। किसी भी घाटे से बचने के लिए हमारी सलाह है कि अपनी फसल तुरंत मंडी ले जाकर आज ही बेचें।`;
+    audioSpeechEn = `Urgent alert for farmers! High crop arrivals at ${cleanMandiEn} are creating heavy market supply, which will likely push ${cleanCropEn} prices down. Today's rate of ${basePrice} rupees is projected to decline to ${forecastDay7Price} rupees in seven days, risking a loss of ${absDiff} rupees per quintal. To protect your earnings, our strong advice is to SELL your crop immediately today.`;
+    audioSpeechMai = `सावधान रहू किसान भाई! ${cleanMandiHi} मे बेसी आवक होय स' ${cleanCropMai} के दर खसय के भारी आशंका अछि। आजुक दर ${basePrice} रुपया अछि जे सात दिन मे खसि कय ${forecastDay7Price} रुपया भ' सकैत अछि, माने ${absDiff} रुपया के नुकसानी। घाटा स' बचय लेल माल तुरंते मंडी ल' जाउ आ बेचि दियौ।`;
   } else {
     urgency = 'medium';
     actionTitleHi = 'निगरानी रखें (स्थिर भाव)';
@@ -327,13 +334,13 @@ export function calculateForecast(mandiId: string, cropId: string): PredictionRe
     actionTitleMai = 'ताक-झांक राखू (दर स्थिर अछि)';
     optimalSaleDay = 3;
 
-    reasonHi = `भाव अगले हफ्ते केवल ±₹${Math.abs(priceChangeAbs)}/क्विंटल के दायरे में सीमित रहेगा। अपनी नकदी की आवश्यकता और भंडारण क्षमता अनुसार निर्णय लें।`;
+    reasonHi = `भाव अगले हफ्ते केवल ±₹${absDiff}/क्विंटल के दायरे में सीमित रहेगा। अपनी नकदी की आवश्यकता और भंडारण क्षमता अनुसार निर्णय लें।`;
     reasonEn = `Market prices are moving sideways in a narrow channel. Liquidate based on warehouse storage costs and immediate cash obligations.`;
     reasonMai = `दर मे कोनो खास बढ़त या गिरावट नहि अछि। अपन सुविधा आ रूपैया के जरूरत मुताबिक फैसला लिय।`;
 
-    audioSpeechHi = `किसान भाई, ${mandi.hindiName} में ${crop.hindiName} का भाव लगभग स्थिर रहेगा। दर ₹${basePrice} के करीब ही बना रहेगा। अपनी सुविधा के अनुसार फसल बेच सकते हैं।`;
-    audioSpeechEn = `Farmer advisory: ${crop.name} price at ${mandi.name} is stable at around ₹${basePrice} per quintal. Proceed with selling as per your household requirements.`;
-    audioSpeechMai = `${mandi.hindiName} मे ${crop.maithiliName} के दर स्थिर अछि। अपन जरूरत मुताबिक फैसला क' सकैत छी।`;
+    audioSpeechHi = `किसान भाई ध्यान दें! ${cleanMandiHi} में ${cleanCropHi} का भाव अगले हफ्ते लगभग स्थिर रहने का अनुमान है। दर ${basePrice} रुपये के आसपास ही बना रहेगा। इसलिए अपनी नकदी की जरूरत और सुरक्षित भंडारण की सुविधा अनुसार ही बिक्री का निर्णय लें।`;
+    audioSpeechEn = `Farmer advisory for ${cleanMandiEn}: The price for ${cleanCropEn} is forecasted to remain stable around ${basePrice} rupees per quintal over the next week. We recommend timing your sale based on your immediate cash requirements and storage capacity.`;
+    audioSpeechMai = `किसान भाई! ${cleanMandiHi} मे ${cleanCropMai} के दर आगू सात दिन मे लगभग स्थिर रहत, ${basePrice} रुपया के आसपास। अपन जरूरत आ गोदाम सुविधा अनुसार फैसला लिय।`;
   }
 
   return {

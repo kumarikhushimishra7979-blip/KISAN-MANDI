@@ -63,6 +63,11 @@ export interface PredictionResult {
   forecastSeries: DailyForecast[];
   historicalPrices: { date: string; price: number }[];
   modelConfidence: number;
+  dataSource?: 'live_apmc_api' | 'historical_agmarknet_fallback';
+  isLiveData?: boolean;
+  arrivalDate?: string;
+  dataNote?: string;
+  lastRefreshed?: string;
   qualityMoistureImpact: {
     recommendedMoisture: number;
     priceDeductionPerPct: number;

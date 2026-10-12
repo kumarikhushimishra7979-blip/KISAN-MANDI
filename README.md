@@ -22,18 +22,32 @@ This project delivers a **voice-first, multilingual, icon-driven interface**:
 ```text
 mandi-price-prediction/
 ├── data/
-│   └── agmarknet_data.csv             # Historical mandi prices & daily arrivals
+│   └── agmarknet_data.csv             # Historical mandi prices & resilient fallback
 ├── models/
 │   └── xgboost_maize_gulabbagh.joblib    # Trained XGBoost model artifact
 ├── src/
+│   ├── live_data_fetcher.py           # Real-time data.gov.in API collector & offline fallback
 │   ├── preprocess.py                  # Lag calculation (t-1, t-7), rolling averages
 │   ├── train.py                       # Model fitting, evaluation (RMSE, MAPE)
 │   └── inference.py                   # Recursive multi-step 7-day forecasting
-├── app.py                             # FastAPI backend & GET /predict endpoint
+├── app.py                             # FastAPI backend & GET /predict dynamic endpoint
 ├── streamlit_app.py                   # Streamlit frontend with voice & visuals
 ├── requirements.txt                   # Pinned Python package dependencies
 └── README.md                          # Complete setup and evaluation guide
 ```
+
+---
+
+## 3. Dynamic Real-Time Data Collection & Resilient Fallback
+The platform shifts away from hardcoded mock arrays to a **two-tier dynamic data engine**:
+1. **Tier 1 - Live Open Government Data API (`data.gov.in`):**
+   - Automatically queries the Daily Mandi Price resource for Bihar APMCs.
+   - Real-time updates for commodities (Maize, Paddy, Wheat, Mustard, etc.) in Gulabbagh and regional yards.
+   - Built-in **15-minute in-memory caching** prevents rate-limiting and guarantees low latency.
+2. **Tier 2 - Resilient Offline Fallback (`agmarknet_data.csv`):**
+   - If the API times out, the network is offline, or no API key is supplied, the application automatically falls back to validated historical Agmarknet records.
+   - **Zero-crash guarantee**: The UI, charts, and forecasts always render accurately even in rural areas with poor connectivity.
+
 
 ---
 

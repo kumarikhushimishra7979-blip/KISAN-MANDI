@@ -13,10 +13,12 @@ import datetime
 import os
 import joblib
 
+from src.live_data_fetcher import get_dynamic_mandi_data
+
 app = FastAPI(
     title="Kisan Mandi Bhav Predictor API",
-    description="Agmarknet Mandi Price Prediction & Voice Advisory Service for Indian Farmers",
-    version="1.0.0",
+    description="Dynamic Agmarknet Mandi Price Prediction & Voice Advisory Service for Indian Farmers",
+    version="1.1.0",
 )
 
 # Enable CORS for Streamlit / React frontend consumption
@@ -100,6 +102,7 @@ class PredictionResponse(BaseModel):
     current_price: float
     min_price: float
     max_price: float
+    today_arrivals: float
     forecast_day7_price: float
     price_change_absolute: float
     price_change_percentage: float
@@ -108,32 +111,43 @@ class PredictionResponse(BaseModel):
     forecast_series: List[DailyForecast]
     confidence_score: float
     model_type: str
+    data_source: str
+    is_live_data: bool
+    arrival_date: str
+    data_note: str
     timestamp: str
 
 def generate_advisory(crop_name_hi: str, crop_name_en: str, crop_name_mai: str,
                       change_pct: float, change_abs: float, mandi_name: str,
                       current_price: float, target_price: float) -> AdvisoryText:
     """Generate rule-based advisory and regional speech scripts based on price trends."""
+    clean_c_hi = crop_name_hi.split('(')[0].strip()
+    clean_m_hi = mandi_name.split('(')[0].strip()
+    clean_c_en = crop_name_en.split('(')[0].strip()
+    clean_m_en = mandi_name.split('(')[0].strip()
+    clean_c_mai = crop_name_mai.split('(')[0].strip()
+    diff_val = round(abs(change_abs))
+
     if change_pct >= 2.5:
         action = "HOLD"
         action_hi = "रोकें (स्टॉक बचाएं)"
         action_maithili = "रुकीं (अखनि नहि बेची)"
-        reason_en = f"Prices are expected to surge by ₹{abs(change_abs):.0f}/Qtl (+{change_pct:.1f}%) over the next 7 days due to steady demand."
-        reason_hi = f"अगले 7 दिनों में भाव ₹{abs(change_abs):.0f} प्रति क्विंटल (+{change_pct:.1f}%) बढ़ने का अनुमान है। अभी फसल न बेचें।"
-        reason_maithili = f"आबय वला 7 दिन मे मकई के दर ₹{abs(change_abs):.0f} क्विंटल (+{change_pct:.1f}%) बढ़य के संभावना अछि। माल रोकि कय राखू।"
-        audio_hi = f"किसान भाई ध्यान दें! {mandi_name} में {crop_name_hi} का भाव अगले सात दिनों में ₹{target_price:.0f} तक बढ़ने की संभावना है। हमारी सलाह है कि अपनी उपज को रोककर रखें और ऊंचे दाम पर बेचें।"
-        audio_en = f"Farmer advisory for {mandi_name}: {crop_name_en} prices are projected to rise by {change_pct:.1f}% to {target_price:.0f} rupees per quintal. We recommend holding your produce."
-        audio_mai = f"किसान भाई! {mandi_name} मे {crop_name_mai} के भाव आगू 7 दिन मे ₹{target_price:.0f} टका तक चढ़त। अखन माल रोकि कय राखू, नीक फायदा होयत।"
+        reason_en = f"Prices are expected to surge by ₹{diff_val}/Qtl (+{change_pct:.1f}%) over the next 7 days due to steady demand."
+        reason_hi = f"अगले 7 दिनों में भाव ₹{diff_val} प्रति क्विंटल (+{change_pct:.1f}%) बढ़ने का अनुमान है। अभी फसल न बेचें।"
+        reason_maithili = f"आबय वला 7 दिन मे मकई के दर ₹{diff_val} क्विंटल (+{change_pct:.1f}%) बढ़य के संभावना अछि। माल रोकि कय राखू।"
+        audio_hi = f"राम राम किसान भाई! {clean_m_hi} में {clean_c_hi} का आज का भाव {current_price:.0f} रुपये प्रति क्विंटल है। अगले सात दिनों में भाव बढ़कर लगभग {target_price:.0f} रुपये होने का अनुमान है, जिससे आपको प्रति क्विंटल {diff_val} रुपये का सीधा अतिरिक्त मुनाफा होगा। इसलिए हमारी स्पष्ट सलाह है कि फसल को रोककर रखें और चार से पांच दिन बाद ऊंचे दाम पर बेचें।"
+        audio_en = f"Attention farmer friends! The current market rate for {clean_c_en} at {clean_m_en} is {current_price:.0f} rupees per quintal. Machine learning models forecast prices to rise to {target_price:.0f} rupees over the next seven days, offering an extra profit of approximately {diff_val} rupees per quintal. Therefore, our clear advisory is to HOLD your stock and sell later at peak rates."
+        audio_mai = f"प्रणाम किसान भाई! {clean_m_hi} मे {clean_c_mai} के आजुक दर {current_price:.0f} रुपया प्रति क्विंटल अछि। सात दिन मे दर बढ़ि क' लगभग {target_price:.0f} रुपया होय के संभावना अछि, माने प्रति क्विंटल {diff_val} रुपया के सीधा फायदा। ताहि लेल माल अखन रोकि कय राखू आ चारि-पाँच दिन बाद नीक दर पर बेची।"
     elif change_pct <= -2.5:
         action = "SELL"
         action_hi = "तुरंत बेचें (मंडी ले जाएं)"
         action_maithili = "झटपट बेची (मंडी ल' जाउ)"
-        reason_en = f"Heavy arrivals expected to push prices down by ₹{abs(change_abs):.0f}/Qtl ({change_pct:.1f}%). Liquidate inventory promptly."
-        reason_hi = f"आवक बढ़ने से भाव में ₹{abs(change_abs):.0f} प्रति क्विंटल ({change_pct:.1f}%) की गिरावट की आशंका है। तुरंत बेचें।"
-        reason_maithili = f"मंडी मे बेसी आवक होय स' दर ₹{abs(change_abs):.0f} क्विंटल खस सकैत अछि। तुरंते बेचब नीक रहत।"
-        audio_hi = f"सतर्क रहें! {mandi_name} में {crop_name_hi} का भाव गिरकर ₹{target_price:.0f} हो सकता है। नुकसान से बचने के लिए अपनी फसल तुरंत मंडी ले जाकर बेचें।"
-        audio_en = f"Attention farmers: {crop_name_en} prices at {mandi_name} are likely to drop to {target_price:.0f} rupees. We advise selling immediately to avoid losses."
-        audio_mai = f"सावधान रहू! {mandi_name} मे {crop_name_mai} के दर खस क' ₹{target_price:.0f} भ' सकैत अछि। नुकसानी स' बचय लेल माल तुरंते बेचि दियौक।"
+        reason_en = f"Heavy arrivals expected to push prices down by ₹{diff_val}/Qtl ({change_pct:.1f}%). Liquidate inventory promptly."
+        reason_hi = f"आवक बढ़ने से भाव में ₹{diff_val} प्रति क्विंटल ({change_pct:.1f}%) की गिरावट की आशंका है। तुरंत बेचें।"
+        reason_maithili = f"मंडी मे बेसी आवक होय स' दर ₹{diff_val} क्विंटल खस सकैत अछि। तुरंते बेचब नीक रहत।"
+        audio_hi = f"सतर्क रहें किसान भाई! {clean_m_hi} में नई आवक बढ़ने से {clean_c_hi} के भाव में गिरावट की आशंका है। आज का भाव {current_price:.0f} रुपये है, जो सात दिनों में गिरकर {target_price:.0f} रुपये तक आ सकता है, यानी प्रति क्विंटल लगभग {diff_val} रुपये का नुकसान हो सकता है। घाटे से बचने के लिए हमारी सलाह है कि अपनी उपज तुरंत मंडी ले जाकर आज ही बेचें।"
+        audio_en = f"Important alert for farmers! High arrival volume at {clean_m_en} is expected to push {clean_c_en} prices down. Today's price of {current_price:.0f} rupees is projected to drop to {target_price:.0f} rupees in seven days, risking a loss of {diff_val} rupees per quintal. To protect your earnings, we strongly advise you to SELL your produce immediately."
+        audio_mai = f"सावधान रहू किसान भाई! {clean_m_hi} मे {clean_c_mai} के दर खस क' {target_price:.0f} रुपया भ' सकैत अछि, माने {diff_val} रुपया के नुकसानी। घाटा स' बचय लेल माल तुरंते मंडी ल' जाउ आ बेचि दियौ।"
     else:
         action = "STABLE"
         action_hi = "निगरानी रखें (संतुलित भाव)"
@@ -141,9 +155,9 @@ def generate_advisory(crop_name_hi: str, crop_name_en: str, crop_name_mai: str,
         reason_en = f"Prices remain range-bound within ±2%. Sell according to your immediate cash requirement and storage capacity."
         reason_hi = f"भाव स्थिर रहने की संभावना है (केवल {change_pct:+.1f}% का अंतर)। अपनी सुविधा अनुसार फैसला लें।"
         reason_maithili = f"दर मे कोनो खास फेरबदल नहि देखल जा रहल अछि। अपन सुविधा अनुसार बेचू।"
-        audio_hi = f"{mandi_name} में {crop_name_hi} का भाव लगभग स्थिर बना रहेगा। यदि आपको तत्काल पैसों की आवश्यकता है तो बेच सकते हैं।"
-        audio_en = f"{crop_name_en} prices at {mandi_name} are stable around {target_price:.0f} rupees. Trade according to your storage and cash needs."
-        audio_mai = f"{mandi_name} मे {crop_name_mai} के दर स्थिर अछि। अपन जरूरत मुताबिक फैसला लिय।"
+        audio_hi = f"किसान भाई ध्यान दें! {clean_m_hi} में {clean_c_hi} का भाव अगले हफ्ते लगभग स्थिर रहने का अनुमान है, {current_price:.0f} रुपये के करीब ही बना रहेगा। इसलिए अपनी नकदी की जरूरत और भंडारण सुविधा अनुसार ही बिक्री का निर्णय लें।"
+        audio_en = f"Farmer advisory for {clean_m_en}: The price for {clean_c_en} is forecasted to remain stable around {current_price:.0f} rupees per quintal over the next week. We recommend selling according to your immediate cash requirements and warehouse storage capacity."
+        audio_mai = f"किसान भाई! {clean_m_hi} मे {clean_c_mai} के दर स्थिर अछि। अपन जरूरत मुताबिक फैसला लिय।"
 
     return AdvisoryText(
         action=action,
@@ -194,18 +208,40 @@ def root():
         "status": "online",
         "supported_mandis": list(MARKET_BASELINES.keys()),
         "supported_crops": list(SUPPORTED_CROPS.keys()),
+        "data_feed": "dynamic_agmarknet_datagov_with_resilient_fallback",
         "docs_url": "/docs",
+    }
+
+@app.get("/data/status")
+def get_data_feed_status(
+    crop: str = Query("maize", description="Crop identifier"),
+    mandi: str = Query("gulabbagh", description="Mandi identifier"),
+    refresh: bool = Query(False, description="Force cache refresh")
+):
+    """Checks current dynamic data retrieval status and feed source."""
+    dyn_data = get_dynamic_mandi_data(crop, mandi, force_refresh=refresh)
+    return {
+        "crop": crop,
+        "mandi": mandi,
+        "data_source": dyn_data["source"],
+        "is_live_data": dyn_data["is_live"],
+        "modal_price": dyn_data["modal_price"],
+        "arrival_date": dyn_data["arrival_date"],
+        "note": dyn_data["note"],
+        "last_refreshed": dyn_data["last_refreshed"],
     }
 
 @app.get("/predict", response_model=PredictionResponse)
 def get_prediction(
     crop: str = Query("maize", description="Crop identifier (e.g. maize, paddy, wheat, mustard)"),
     mandi: str = Query("gulabbagh", description="Mandi market identifier (e.g. gulabbagh, purnea, patna, muzaffarpur)"),
+    refresh: bool = Query(False, description="Force refresh live API fetch"),
 ):
     """
-    Primary GET endpoint requested by the project specification:
-    Loads pre-trained model (or simulates realistic time-series forecasting)
-    and returns 7-day predictions along with multilingual farmer advisory.
+    Primary GET endpoint:
+    Dynamically retrieves current APMC mandi prices from data.gov.in / Agmarknet,
+    gracefully falling back to historical CSV data if offline or rate-limited,
+    and returns recursive 7-day forecasts plus multilingual advisories.
     """
     crop_key = crop.lower().strip()
     mandi_key = mandi.lower().strip()
@@ -216,13 +252,18 @@ def get_prediction(
         crop_key = "maize"
 
     mandi_info = MARKET_BASELINES[mandi_key]
-    crop_market_data = mandi_info.get(crop_key, mandi_info["maize"])
 
-    base_price = float(crop_market_data["base_price"])
-    trend = float(crop_market_data["trend"])
-    volatility = float(crop_market_data["volatility"])
+    # Dynamically fetch current daily price & arrivals from live API / resilient fallback
+    dyn_data = get_dynamic_mandi_data(crop_key, mandi_key, force_refresh=refresh)
 
-    # Attempt to load disk artifact if present, otherwise use realistic recursive simulation
+    base_price = float(dyn_data["modal_price"])
+    min_price = float(dyn_data.get("min_price", base_price * 0.96))
+    max_price = float(dyn_data.get("max_price", base_price * 1.04))
+    arrivals = float(dyn_data.get("arrivals", 3200))
+    trend = float(dyn_data.get("trend", 0.045))
+    volatility = float(dyn_data.get("volatility", 0.028))
+
+    # Attempt to load disk artifact if present, otherwise use recursive lag simulation
     model_path = f"models/xgboost_{crop_key}_{mandi_key}.joblib"
     model_type = "XGBoost-Regressor" if os.path.exists(model_path) else "Recursive-Lag-Time-Series"
 
@@ -256,8 +297,9 @@ def get_prediction(
         crop_name=crop_meta["hi"],
         crop_icon=crop_meta["icon"],
         current_price=base_price,
-        min_price=round(base_price * 0.96, 2),
-        max_price=round(base_price * 1.04, 2),
+        min_price=round(min_price, 2),
+        max_price=round(max_price, 2),
+        today_arrivals=round(arrivals, 2),
         forecast_day7_price=round(day7_price, 2),
         price_change_absolute=round(abs_change, 2),
         price_change_percentage=round(pct_change, 2),
@@ -266,6 +308,10 @@ def get_prediction(
         forecast_series=forecast_series,
         confidence_score=0.91,
         model_type=model_type,
+        data_source=dyn_data["source"],
+        is_live_data=dyn_data["is_live"],
+        arrival_date=dyn_data["arrival_date"],
+        data_note=dyn_data["note"],
         timestamp=datetime.datetime.now().isoformat(),
     )
 

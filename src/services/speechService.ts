@@ -11,10 +11,24 @@ class SpeechService {
   private synth: SpeechSynthesis | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private recognition: any = null;
+  private voices: SpeechSynthesisVoice[] = [];
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       this.synth = window.speechSynthesis;
+      this.initVoices();
+    }
+  }
+
+  private initVoices() {
+    if (!this.synth) return;
+    this.voices = this.synth.getVoices();
+    if (this.synth.onvoiceschanged !== undefined) {
+      this.synth.onvoiceschanged = () => {
+        if (this.synth) {
+          this.voices = this.synth.getVoices();
+        }
+      };
     }
   }
 
@@ -27,10 +41,90 @@ class SpeechService {
     return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
   }
 
+  /**
+   * Sanitizes speech text to remove confusing raw data artifacts:
+   * Replaces ₹ with words, expands percentage symbols, removes bracketed transliterations.
+   */
+  public cleanTextForSpeech(text: string, lang: Language): string {
+    let cleaned = text;
+
+    // Remove text inside brackets like (Corn), (Wheat), (Qtl)
+    cleaned = cleaned.replace(/\([^)]*\)/g, ' ');
+
+    if (lang === 'en') {
+      cleaned = cleaned.replace(/₹\s*(\d+)/g, '$1 rupees');
+      cleaned = cleaned.replace(/₹/g, ' rupees ');
+      cleaned = cleaned.replace(/%/g, ' percent ');
+      cleaned = cleaned.replace(/\/Qtl/gi, ' per quintal ');
+      cleaned = cleaned.replace(/\/क्विंटल/gi, ' per quintal ');
+      cleaned = cleaned.replace(/\+/g, ' plus ');
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    } else {
+      // Hindi or Maithili
+      cleaned = cleaned.replace(/₹\s*(\d+)/g, '$1 रुपये');
+      cleaned = cleaned.replace(/₹/g, ' रुपये ');
+      cleaned = cleaned.replace(/%/g, ' प्रतिशत ');
+      cleaned = cleaned.replace(/\/Qtl/gi, ' प्रति क्विंटल ');
+      cleaned = cleaned.replace(/\/क्विंटल/gi, ' प्रति क्विंटल ');
+      cleaned = cleaned.replace(/\+/g, ' ');
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Dynamically selects the best available system voice corresponding to the chosen language.
+   */
+  private getBestVoiceForLanguage(lang: Language): SpeechSynthesisVoice | null {
+    if (!this.synth || this.voices.length === 0) {
+      if (this.synth) this.voices = this.synth.getVoices();
+    }
+
+    if (this.voices.length === 0) return null;
+
+    if (lang === 'hi' || lang === 'mai') {
+      // Priority 1: Exact Hindi India voice
+      const hindiExact = this.voices.find(
+        (v) => v.lang.toLowerCase() === 'hi-in' || v.lang.toLowerCase() === 'hi_in'
+      );
+      if (hindiExact) return hindiExact;
+
+      // Priority 2: Any voice starting with 'hi' or with 'hindi' in its name
+      const hindiGeneral = this.voices.find(
+        (v) => v.lang.toLowerCase().startsWith('hi') || v.name.toLowerCase().includes('hindi')
+      );
+      if (hindiGeneral) return hindiGeneral;
+
+      // Priority 3: Any Indian locale voice
+      const indianLocale = this.voices.find((v) => v.lang.toLowerCase().includes('in'));
+      if (indianLocale) return indianLocale;
+    } else {
+      // English mode
+      // Priority 1: Indian English voice for familiar natural accent
+      const enIndia = this.voices.find(
+        (v) => (v.lang.toLowerCase() === 'en-in' || v.name.toLowerCase().includes('india')) &&
+               !v.name.toLowerCase().includes('hindi')
+      );
+      if (enIndia) return enIndia;
+
+      // Priority 2: General US/UK English voice
+      const enStandard = this.voices.find(
+        (v) => v.lang.toLowerCase() === 'en-us' || v.lang.toLowerCase() === 'en-gb' || v.lang.toLowerCase().startsWith('en')
+      );
+      if (enStandard) return enStandard;
+    }
+
+    return this.voices[0] || null;
+  }
+
+  /**
+   * Speaks the provided text using the dynamically selected language state.
+   */
   public speak(
     text: string,
     lang: Language,
-    rate: number = 0.9,
+    rate: number = 0.88,
     onStart?: () => void,
     onEnd?: () => void,
     onError?: (err: any) => void
@@ -40,27 +134,29 @@ class SpeechService {
       return;
     }
 
+    // Always stop any prior ongoing speech immediately to prevent overlap
     this.stopSpeaking();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const sanitizedText = this.cleanTextForSpeech(text, lang);
+    const utterance = new SpeechSynthesisUtterance(sanitizedText);
     this.currentUtterance = utterance;
 
-    // Language code map
-    let langCode = 'hi-IN';
-    if (lang === 'en') langCode = 'en-IN';
-    else if (lang === 'mai') langCode = 'hi-IN'; // Uses Indian Hindi phonemes for Maithili text
+    // Synchronize language tag exactly with user's selection
+    let targetLangCode = 'hi-IN';
+    if (lang === 'en') {
+      targetLangCode = 'en-US';
+    } else if (lang === 'mai') {
+      targetLangCode = 'hi-IN'; // Maithili Devanagari phonetics
+    }
 
-    utterance.lang = langCode;
-    utterance.rate = rate; // 0.85 - 0.9 is easy for village elders to follow
+    utterance.lang = targetLangCode;
+    utterance.rate = lang === 'en' ? Math.max(0.9, rate) : rate; // 0.85-0.9 is gentle and clear
     utterance.pitch = 1.0;
 
-    // Pick best Indian voice if available
-    const voices = this.synth.getVoices();
-    const hindiVoice = voices.find(
-      (v) => v.lang.startsWith('hi') || v.lang.includes('IN') || v.name.toLowerCase().includes('india')
-    );
-    if (hindiVoice) {
-      utterance.voice = hindiVoice;
+    // Pick matching voice dynamically
+    const selectedVoice = this.getBestVoiceForLanguage(lang);
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
     }
 
     utterance.onstart = () => {
@@ -73,16 +169,27 @@ class SpeechService {
     };
 
     utterance.onerror = (e) => {
+      // Ignore interruption errors when user intentionally switched language or hit stop
+      if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        if (onError) onError(e);
+      }
       this.currentUtterance = null;
-      if (onError) onError(e);
     };
 
-    this.synth.speak(utterance);
+    try {
+      this.synth.speak(utterance);
+    } catch (err) {
+      if (onError) onError(err);
+    }
   }
 
   public stopSpeaking() {
     if (this.synth) {
-      this.synth.cancel();
+      try {
+        this.synth.cancel();
+      } catch (e) {
+        // ignore
+      }
       this.currentUtterance = null;
     }
   }
