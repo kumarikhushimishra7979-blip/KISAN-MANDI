@@ -110,10 +110,10 @@ import plotly.graph_objects as go
 from gtts import gTTS
 import tempfile
 
-st.set_page_config(page_title="Kisan Mandi Bhav Predictor", layout="wide")
+st.set_page_config(page_title="Kisan Mandi", page_icon="🌾", layout="centered")
 
-st.title("🌾 Kisan Mandi Bhav Predictor & Voice Advisory")
-st.subheader("7-Day Agmarknet Price Forecasting for Rural Farmers")
+st.markdown("# 🌾 Kisan Mandi")
+st.caption("आपका डिजिटल मंडी भाव व सलाह सहायक")
 
 col_left, col_right = st.columns([1, 2])
 with col_left:

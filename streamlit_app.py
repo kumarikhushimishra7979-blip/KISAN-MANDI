@@ -16,9 +16,9 @@ except ImportError:
     HAS_GTTS = False
 
 st.set_page_config(
-    page_title="Kisan Mandi Bhav Predictor & Voice Advisory",
+    page_title="Kisan Mandi",
     page_icon="🌾",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
@@ -120,8 +120,8 @@ voice_query = st.sidebar.text_input(
 )
 
 # Header
-st.markdown('<div class="main-title">🌾 किसान मंडी भाव और आवाज़ सलाहकार</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Kisan Mandi Bhav Predictor & 7-Day ML Price Forecasting System</div>', unsafe_allow_html=True)
+st.markdown("# 🌾 Kisan Mandi")
+st.caption("आपका डिजिटल मंडी भाव व सलाह सहायक · AI-Powered APMC Price Forecasting & Voice Advisory")
 
 # Fetch prediction from backend API or dynamic fallback engine
 API_URL = "http://localhost:8000/predict"
@@ -308,4 +308,4 @@ if data:
     st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
-st.caption("🌾 Kisan Mandi Bhav Predictor Minor Project | Data modeled from Agmarknet APMC Market Records.")
+st.caption("🌾 Kisan Mandi · आपका डिजिटल मंडी भाव व सलाह सहायक | Data modeled from Agmarknet APMC Market Records.")
